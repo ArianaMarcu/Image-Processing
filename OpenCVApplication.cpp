@@ -1792,8 +1792,606 @@ void egalizarea_histogramei()
 
 //LAB9
 //ex 1
+Mat_<float> convolutie(Mat_<uchar> src, Mat_<float> H) 
+{
+	Mat_<float> dst(src.rows, src.cols);
+	for (int i = 0; i < src.rows; i++)
+		for (int j = 0; j < src.cols; j++)
+		{
+			float suma = 0;
+			int ku = H.rows / 2, kv = H.cols / 2;
+			for (int u = 0; u < H.rows; u++)
+				for (int v = 0; v < H.cols; v++)
+				{
+					int newi = i + u - ku; //k=(w-1)/2
+					int newj = j + v - kv;
+					if (isInside(src.rows, src.cols, newi, newj))
+						suma += H(u, v) * (float)src(newi, newj); 
+						//I_D(i,j)=H*I_s
+				}
+			dst(i, j) = suma;
+		}
+	return dst;
+}
+
+Mat_<uchar> test_convolutie(Mat_<float> H, Mat_<float> c, int coef) 
+{
+	Mat_<uchar> dst(c.rows, c.cols);
+	float suma_coef_neg = 0.0f, sum_coef_poz = 0.0f;
+	int filtru_trece_jos = 1;
+	for (int i = 0; i < H.rows; i++)
+		for (int j = 0; j < H.rows; j++)
+			if (H(i, j) > 0)
+				sum_coef_poz += H(i, j); //S+
+			else if (H(i, j) < 0) 
+			{
+				suma_coef_neg += abs(H(i, j)); //S-
+				filtru_trece_jos = 0;
+			}
+
+	float max_sum = max(sum_coef_poz, suma_coef_neg);
+	float S = 1.0f / (2.0f * max_sum); //S = 1/(2max(S+,S-))
+	float Lhalf = L / 2.0f;
+
+	if (filtru_trece_jos)
+		for (int i = 0; i < c.rows; i++)
+			for (int j = 0; j < c.cols; j++)
+				dst(i, j) = c(i, j) / (float)coef;
+	else 
+	{
+		for (int i = 0; i < c.rows; i++)
+			for (int j = 0; j < c.cols; j++) {
+				float x = S * c(i, j) + Lhalf; //I_D(u,v) = S(F*I_S)(u,v)+[L/2]
+				if (x < 0) dst(i, j) = 0;
+				else if (x > 255) dst(i, j) = 255;
+				else dst(i, j) = static_cast<uchar>(x);
+			}
+	}
+	return dst;
+}
+
+float suma_coeficientilor(const Mat_<float>& mat) 
+{
+	float suma = 0.0f;
+	for (int i = 0; i < mat.rows; i++)
+		for (int j = 0; j < mat.cols; j++)
+			suma += mat(i, j);
+	return suma;
+}
+
+//ex 2
+void nuclee() 
+{
+	char fname[MAX_PATH];
+	while(openFileDlg(fname)) 
+	{
+		Mat_<uchar> src = imread(fname, IMREAD_GRAYSCALE);
+		imshow("input image", src); //9.2a)
+		Mat_<uchar> dst;
+
+		Mat_<float> H1(3, 3, (float)1);
+		Mat_<float> c = convolutie(src, H1);
+		Mat_<uchar> dst1 = test_convolutie(H1, c, suma_coeficientilor(H1));
+		imshow("Filtrul medie aritmetica 3x3", dst1); //9.2b)
+
+		Mat_<float> H2(5, 5, (float)1);
+		c = convolutie(src, H2);
+		dst = test_convolutie(H2, c, suma_coeficientilor(H2));
+		imshow("Filtrul medie aritmetica 5x5", dst); //9.2c)
+
+		Mat_<float> H3(3, 3, (float)1);
+		H3(0, 1) = 2;
+		H3(1, 0) = 2;
+		H3(1, 2) = 2;
+		H3(2, 1) = 2;
+		H3(1, 1) = 4;
+		c = convolutie(src, H3);
+		dst = test_convolutie(H3, c, suma_coeficientilor(H3));
+		imshow("Filtrul gaussian 3x3", dst);
+
+		Mat_<float> H4(3, 3, (float)-1);
+		H4(1, 1) = 8;
+		c = convolutie(src, H4);
+		dst = test_convolutie(H4, c, 1);
+		imshow("Filtrul Laplace 3x3", dst); //9.3a)
+
+		Mat_<float> H5(3, 3, (float)-1);
+		H5(1, 1) = 8;
+		c = convolutie(dst1, H5);
+		dst = test_convolutie(H5, c, 1);
+		imshow("Laplace 3x3 pe 9.2b)", dst); //9.3b)
+
+		Mat_<float> H6(3, 3, (float)-1);
+		H6(1, 1) = 9;
+		c = convolutie(src, H6);
+		dst = test_convolutie(H6, c, 1);
+		imshow("Filtrul trece-sus 3x3", dst); //9.3c)
+		waitKey();
+	}
+}
+
+//LAB10
+//ex 1
+Mat filtru_median(const Mat& src, int w) 
+{
+	double t = (double)getTickCount();
+	Mat dst = src.clone();
+	for (int i = w/2; i < src.rows - w/2; ++i)
+		for (int j = w/2; j < src.cols - w/2; ++j) 
+		{
+			vector<uchar> vect;
+			for (int m = - w/2; m <= w/2; ++m)
+				for (int n = - w/2; n <= w/2; ++n)
+					vect.push_back(src.at<uchar>(i + m, j + n));
+			sort(vect.begin(), vect.end());
+			uchar medianValue = vect[vect.size() / 2];
+			dst.at<uchar>(i, j) = medianValue;
+		}
+	t = ((double)getTickCount() - t) / getTickFrequency();
+	printf("Time = %.3f [ms]\n", t * 1000);
+	return dst;
+}
+
+void test()
+{
+	char fname[MAX_PATH];
+	int w;
+	while (openFileDlg(fname))
+	{
+		Mat src = imread(fname, IMREAD_GRAYSCALE);
+		printf("3,5 sau 7: ");
+		scanf("%d", &w);
+		Mat dst = filtru_median(src, w);
+		imshow("input image", src);
+		imshow("filtrata", dst);
+		waitKey(0);
+	}
+}
+
+//ex 2
+float** filtru_gaussian(int w, float sigma, int mid)
+{
+	float** G = (float**)malloc(w * sizeof(float*));
+	for (int i = 0; i < w; ++i)
+		G[i] = (float*)malloc(w * sizeof(float));
+	for (int x = 0; x < w; x++)
+		for (int y = 0; y < w; y++)
+		{
+			float fr = 1.0 / (2 * PI * pow(sigma, 2));
+			float p = (pow(x - mid, 2) + pow(y - mid, 2)) / (2 * pow(sigma, 2));
+			G[x][y] = fr * exp(-p);
+		}
+	return G;
+}
+
+void filtrare_nucleu_gaussian_bidimensional()
+{
+	int w;
+	char fname[MAX_PATH];
+	while (openFileDlg(fname))
+	{
+		printf("3,5 sau 7: ");
+		scanf("%d", &w);
+		Mat src = imread(fname, IMREAD_GRAYSCALE);
+		Mat dst = src.clone();
+		double t = (double)getTickCount();
+		float sigma = (float)w/6;
+		float** G = filtru_gaussian(w, sigma, w/2);
+		for (int i = w/2; i < src.rows - w/2; i++)
+			for (int j = w/2; j < src.cols - w/2; j++)
+			{
+				float sum = 0;
+				for (int m = 0; m < w; m++)
+					for (int n = 0; n < w; n++)
+					{
+						int pixel = src.at<uchar>(i - (w/2) + m, j - (w/2) + n);
+						sum += pixel * G[m][n];
+					}
+				dst.at<uchar>(i, j) = (uchar)sum;
+			}
+		t = ((double)getTickCount() - t) / getTickFrequency();
+		printf("Time = %.3f [ms]\n", t * 1000);
+		imshow("input image", src);
+		imshow("filtrata", dst);
+		waitKey(0);
+	}
+}
+
+//ex 3
+void filtrare_nucleu_gaussian_separat_vectorial()
+{
+	int w;
+	char fname[MAX_PATH];
+	while (openFileDlg(fname))
+	{
+		double t = (double)getTickCount();
+		printf("3,5 sau 7: ");
+		scanf("%d", &w);
+		Mat src = imread(fname, IMREAD_GRAYSCALE);
+		Mat dst = src.clone();
+		float sigma = (float)w/6;
+		float* G_x = (float*)calloc(w, sizeof(float));
+		for (int i = 0; i < w; i++)
+		{
+			float fr = 1.0 / (sqrt(2.0 * PI) * sigma);
+			float p = (pow(i - w/2, 2)) / (2 * pow(sigma, 2));
+			G_x[i] = fr * exp(-p);
+		}
+		for (int i = w/2; i < src.rows - w/2; i++)
+			for (int j = w/2; j < src.cols - w/2; j++)
+			{
+				float sum = 0;
+				for (int m = 0; m < w; m++)
+				{
+					int pixel = src.at<uchar>(i, j - (w/2) + m);
+					sum += pixel * G_x[m];
+				}
+				dst.at<uchar>(i, j) = (uchar)sum;
+			}
+		Mat dst1 = dst.clone();
+		for (int i = w/2; i < src.rows - w/2; i++)
+			for (int j = w/2; j < src.cols - w/2; j++)
+			{
+				float sum = 0;
+				for (int m = 0; m < w; m++)
+				{
+					int pixel = dst.at<uchar>(i - (w/2) + m, j);
+					sum += pixel * G_x[m]; //G_y = G_x
+				}
+				dst1.at<uchar>(i, j) = (uchar)sum;
+			}
+		t = ((double)getTickCount() - t) / getTickFrequency();
+		printf("Time = %.3f [ms]\n", t * 1000);
+		imshow("input image", src);
+		imshow("filtrata", dst1);
+		waitKey(0);
+	}
+}
+
+//LAB11.4.1
+//ex 1 si 2
+
+Mat matricea_de_convolutie(Mat src, int H[][3])
+{
+	Mat dst = src.clone();
+	dst.convertTo(dst, CV_32FC1); //grayscale float
+
+	for (int i = 1; i < src.rows-1; i++)
+		for (int j = 1; j < src.cols-1; j++)
+		{
+			int suma = 0;
+			for (int k = 0; k < 3; k++)
+				for (int l = 0; l < 3; l++)
+					suma += H[k][l] * src.at<uchar>(i+k-1, j+l-1);
+			dst.at<float>(i, j) = suma;
+		}
+	return dst;
+}
+
+Mat_<float> directie(Mat src, Mat fx, Mat fy)
+{
+	Mat_<float> dst = src.clone();
+	dst.convertTo(dst, CV_32FC1);
+	for (int i = 0; i < src.rows; i++)
+		for (int j = 0; j < src.cols; j++)
+		{
+			float x = fx.at<float>(i, j);
+			float y = fy.at<float>(i, j);
+			float theta = atan2(y, x); //radiani
+			theta = theta * (180 / PI); //grade
+			if (theta < 0) theta = -theta;
+			dst(i, j) = theta;
+		}
+	return dst;
+}
+
+Mat_<float> modul(Mat src, Mat fx, Mat fy)
+{
+	Mat_<float> dst = src.clone();
+	dst.convertTo(dst, CV_32FC1);
+	for (int i = 0; i < src.rows; i++)
+		for (int j = 0; j < src.cols; j++)
+		{
+			float x = fx.at<float>(i, j);
+			float y = fy.at<float>(i, j);
+			float rez = sqrt((x * x) + (y * y));
+			dst(i, j) = rez / (float)(4.0 * sqrt(2.0));
+		}
+	return dst;
+}
+
+int prewitt_x[3][3] = { -1,0,1,-1,0,1,-1,0,1 };
+int prewitt_y[3][3] = { 1,1,1,0,0,0,-1,-1,-1 };
+
+int sobel_x[3][3] = { -1,0,1,-2,0,2,-1,0,1 };
+int sobel_y[3][3] = { 1,2,1,0,0,0,-1,-2,-1 };
+
+int roberts_x[2][2] = { 1,0,0,-1 };
+int roberts_y[2][2] = { 0,-1,1,0 };
+
+void gradient_modul_directie() 
+{
+	char fname[MAX_PATH];
+	while (openFileDlg(fname))
+	{
+		Mat src = imread(fname, IMREAD_GRAYSCALE);
+		Mat imgSobelx = matricea_de_convolutie(src, sobel_x);
+		Mat imgSobely = matricea_de_convolutie(src, sobel_y);
+		Mat imgPrewittx = matricea_de_convolutie(src, prewitt_x);
+		Mat imgPrewitty = matricea_de_convolutie(src, prewitt_y);
+		Mat imgSobelxDisplay, imgSobelyDisplay;
+		Mat modulSobel = modul(src, imgSobelx, imgSobely);
+		Mat dirSobel = directie(src, imgSobelx, imgSobely);
+		Mat modulPrewitt = modul(src, imgPrewittx, imgPrewitty);
+		Mat dirPrewitt = directie(src, imgPrewittx, imgPrewitty);
+
+		modulSobel.convertTo(modulSobel, CV_8UC1);
+		dirSobel.convertTo(dirSobel, CV_8UC1);
+		dirPrewitt.convertTo(dirPrewitt, CV_8UC1);
+		modulPrewitt.convertTo(modulPrewitt, CV_8UC1);
+		imgSobelx.convertTo(imgSobelxDisplay, CV_8UC1);
+		imgSobely.convertTo(imgSobelyDisplay, CV_8UC1);
+
+		imshow("input image", src);
+		imshow("componenta orizontala gradient", imgSobelxDisplay);
+		imshow("componenta verticala gradient", imgSobelyDisplay);
+		imshow("modul Sobel", modulSobel);
+		imshow("modul Prewitt", modulPrewitt);
+		//imshow("directie Sobel", dirSobel);
+		//imshow("directie Prewitt", dirPrewitt);
+		waitKey(0);
+	}
+}
+
+//ex 3
+void binarizareModul() 
+{
+	int prag=7;
+	char fname[MAX_PATH];
+	while (openFileDlg(fname))
+	{
+		Mat src = imread(fname, IMREAD_GRAYSCALE);
+		Mat imgSobelx = matricea_de_convolutie(src, sobel_x);
+		Mat imgSobely = matricea_de_convolutie(src, sobel_y);
+		Mat m = modul(src, imgSobelx, imgSobely);
+		m.convertTo(m, CV_8UC1);
+		Mat dst = m.clone();
+		for (int i = 0; i < m.rows; i++)
+			for (int j = 0; j < m.cols; j++)
+				if (m.at<uchar>(i, j) >= prag) dst.at<uchar>(i, j) = 255;
+				else dst.at<uchar>(i, j) = 0;
+		imshow("input image", src);
+		imshow("binarizata", dst);
+		waitKey();
+	}
+}
+
+//ex 4
+Mat_<float> convertArrayToMat(const int array[3][3]) 
+{
+	Mat_<float> H(3, 3);
+	for (int i = 0; i < 3; ++i)
+		for (int j = 0; j < 3; ++j)
+			H(i, j) = static_cast<float>(array[i][j]);
+	return H;
+}
+
+Mat filtrare_gaussiana(int w) 
+{
+	char fname[MAX_PATH];
+	printf("%d ", w);
+	while (openFileDlg(fname)) 
+	{
+		Mat img = imread(fname, IMREAD_COLOR);
+		imshow("input image", img);
+		Mat dstt(img.rows, img.cols, CV_8UC1);
+		for (int i = 0; i < img.rows; i++)
+			for (int j = 0; j < img.cols; j++)
+				dstt.at<uchar>(i, j) = (img.at<Vec3b>(i, j)[0] + img.at<Vec3b>(i, j)[1] + img.at<Vec3b>(i, j)[2]) / 3;
+		Mat src = dstt.clone();
+		Mat dst1 = src.clone();
+		Mat dst2 = Mat(src.rows, src.cols, CV_32F);
+		printf("%d ", w);
+		float sigma = (float)w / 6.0;
+		printf("%.2f", sigma);
+		Mat G(w, w, CV_32F);
+		Mat g2(1, w, CV_32F);
+		Mat g1(w, 1, CV_32F);
+		float sum1 = 0, sum2 = 0;
+		int x0 = w / 2, y0 = w / 2;
+		for (int x = 0; x < w; x++)
+			for (int y = 0; y < w; y++) 
+			{
+				float fr = 1.0 / (sqrt(2.0 * PI) * sigma);
+				float p1 = ((x-x0)*(x-x0)) + ((y-y0)*(y-y0));
+				float p2 = p1 / (2 * sigma * sigma);
+				G.at<float>(x, y) = fr * exp(-p2);
+			}
+		//G(x,y)=1/2*pi*sigma*e^-(((x-x0)^2+(y-y0)^2)/2sigma^2)
+		for (int i = 0; i < w; i++) 
+		{
+			g1.at<float>(i, 0) = G.at<float>(i, (w / 2));
+			sum1 += g1.at<float>(i, 0);
+		}
+		Mat c1 = convolutie(src, g1);
+		for (int i = 0; i < src.rows; i++)
+			for (int j = 0; j < src.cols; j++)
+				dst2.at<float>(i, j) = c1.at<float>(i, j) / sum1;
+
+		for (int j = 0; j < w; j++) 
+		{
+			g2.at<float>(0, j) = G.at<float>((w / 2), j);
+			sum2 += g2.at<float>(0, j);
+		}
+		Mat c2 = convolutie(dst2, g2);
+		for (int i = 0; i < src.rows; i++)
+			for (int j = 0; j < src.cols; j++)
+				dst1.at<uchar>(i, j) = c2.at<float>(i, j) / sum2;
+		imshow("grayscale", src);
+		imshow("filtrare gaussiana", dst1);
+		return dst1;
+	}
+}
+
+void DetectieMuchii(int w)
+{
+	float sigma = (float)w / 6.0;
+	printf("%d ", w);
+	printf("%.2f ", sigma);
+	Mat_<float> SobelX = convertArrayToMat(sobel_x);
+	Mat_<float> SobelY = convertArrayToMat(sobel_y);
+	Mat img = filtrare_gaussiana(w);
+	Mat_<float> modul(img.rows, img.cols);
+	Mat_<float> directie(img.rows, img.cols);
+	Mat_<uchar> modulNormalizat(img.rows, img.cols);
+	int di[] = { -1,-1,0,1,1,1,0,-1 };
+	int dj[] = { 0,1,1,1,0,-1,-1,-1 };//vecinatate 8
+
+	for (int i = 0; i < img.rows; i++)
+		for (int j = 0; j < img.cols; j++)
+		{
+			float gradientX = 0, gradientY = 0;
+			for (int m = 0; m < SobelX.rows; m++)
+				for (int n = 0; n < SobelX.cols; n++)
+				{
+					if (isInside(img.rows, img.cols, i + m - SobelX.rows / 2, j + n - SobelX.cols / 2))
+					{
+						gradientX += (float)img.at<uchar>(i + m - SobelX.rows / 2, j + n - SobelX.cols / 2) * SobelX(m, n);
+						gradientY += (float)img.at<uchar>(i + m - SobelX.rows / 2, j + n - SobelX.cols / 2) * SobelY(m, n);
+					}
+				}
+			modul(i, j) = sqrt(pow(gradientX, 2) + pow(gradientY, 2)) / (4 * sqrt(2)); //Modulul gradientului 11.6
+			directie(i, j) = atan2(gradientY, gradientX); //Directia gradientului 11.7
+		}
+	double minVal, maxVal;
+	minMaxLoc(modul, &minVal, &maxVal);
+	modul.convertTo(modulNormalizat, CV_8UC1, 255.0 / maxVal);
+	imshow("normalizare modul", modulNormalizat);
+	int height = modul.rows;
+	int width = modul.cols;
+	Mat_<uchar> suprimareaNonMaximelor(height, width);
+	Mat dir(height, width, CV_32FC1);
+
+	for (int i = 0; i < height; i++)
+		for (int j = 0; j < width; j++)
+		{
+			dir.at<float>(i, j) = directie(i, j) * 180.0 / PI; //din radiani in grade
+			if (dir.at<float>(i, j) < 0)
+				dir.at<float>(i, j) += 180.0;
+		}
+
+	for (int i = 0; i < height; i++)
+		for (int j = 0; j < width; j++)
+		{
+			float dir1 = 0, dir2 = 0;
+			float pixel = dir.at<float>(i, j);
+
+			//i-1,j-1   i-1,j   i-1,j+1   
+			//i,j-1     i,j     i,j+1
+			//i+1,j-1   i+1,j   i+1,j+1
+
+			if (pixel >= 0.0 && pixel < 22.5 || pixel <= 180 && pixel >= 157.5)//dir=2
+			{
+				//muchii orizontale
+				if (isInside(height, width, i, j + 1) && isInside(height, width, i, j - 1)) {
+					dir1 = modulNormalizat(i, j + 1);
+					dir2 = modulNormalizat(i, j - 1);
+				}
+			}
+			else if (pixel >= 22.5 && pixel < 67.5) //dir=1
+			{
+				//muchii diagonale(stanga-jos - dreapta-sus)
+				if (isInside(height, width, i + 1, j - 1) && isInside(height, width, i - 1, j + 1)) {
+					dir1 = modulNormalizat(i + 1, j - 1);
+					dir2 = modulNormalizat(i - 1, j + 1);
+				}
+			}
+			else if (pixel >= 67.5 && pixel < 112.5) //dir=0
+			{
+				//muchii verticale
+				if (isInside(height, width, i + 1, j) && isInside(height, width, i - 1, j)) {
+					dir1 = modulNormalizat(i + 1, j);
+					dir2 = modulNormalizat(i - 1, j);
+				}
+			}
+			else if (pixel >= 112.5 && pixel < 157.5) //dir=3
+			{
+				//muchii diagonale (stanga-sus - dreapta-jos)
+				if (isInside(height, width, i - 1, j - 1) && isInside(height, width, i + 1, j + 1)) {
+					dir1 = modulNormalizat(i - 1, j - 1);
+					dir2 = modulNormalizat(i + 1, j + 1);
+				}
+			}
+			if (modulNormalizat(i, j) >= dir1 && modulNormalizat(i, j) >= dir2)
+				suprimareaNonMaximelor(i, j) = modulNormalizat(i, j);
+			else suprimareaNonMaximelor(i, j) = 0;
+		}
+	imshow("Suprimarea non-maximelor modulului gradientului", suprimareaNonMaximelor);
 
 
+	//binarizarea adaptiva a punctelor de muchie
+	float p = 0.1; //[0.01-0.1]
+	int Hist[256] = { 0 };
+
+	for (int i = 0; i < height; i++)
+		for (int j = 0; j < width; j++) {
+			uchar k = suprimareaNonMaximelor(i, j);
+			Hist[k]++;
+		}
+	float k = 0.4; //k<1
+	int suma = 0, prag_inalt = 0;
+	int NrNonMuchie = (1 - p) * (height * width - Hist[0]);
+
+	for (int i = 1; i <= 255; i++)
+	{
+		suma += Hist[i];
+		prag_inalt = i;
+		if (suma > NrNonMuchie)
+			break;
+	}
+
+	//extinderea muchiilor prin histereza
+	int prag_coborat = k * prag_inalt;
+	for (int i = 0; i < height; i++)
+		for (int j = 0; j < width; j++)
+			if (suprimareaNonMaximelor(i, j) > prag_inalt)
+				suprimareaNonMaximelor(i, j) = 255; //MUCHIE_TARE
+			else if (suprimareaNonMaximelor(i, j) >= prag_coborat)
+				suprimareaNonMaximelor(i, j) = 128; //NON_MUCHIE
+			else
+				suprimareaNonMaximelor(i, j) = 0; //MUCHIE_SLABA
+	imshow("Binarizare adaptiva", suprimareaNonMaximelor);
+
+	for (int i = 0; i < suprimareaNonMaximelor.rows; i++)
+		for (int j = 0; j < suprimareaNonMaximelor.cols; j++)
+			if (suprimareaNonMaximelor(i, j) == 255)
+			{
+				std::queue<Point> Q;
+				Point pixl = Point(j, i);
+				Q.push(pixl);
+				while (!Q.empty())
+				{
+					Point q = Q.front();
+					Q.pop();
+					for (int k = 0; k < 8; k++)
+						if (q.x + di[k] >= 0 && q.x + di[k] < suprimareaNonMaximelor.cols && q.y + dj[k] >= 0 && q.y + dj[k] < suprimareaNonMaximelor.rows)
+						{
+							if (suprimareaNonMaximelor(q.y + dj[k], q.x + di[k]) == 128)
+							{
+								suprimareaNonMaximelor(q.y + dj[k], q.x + di[k]) = 255;
+								Q.push(Point(q.x + di[k], q.y + dj[k]));
+							}
+						}
+				}
+			}
+
+	for (int i = 0; i < height; i++)
+		for (int j = 0; j < width; j++)
+			if (suprimareaNonMaximelor(i, j) == 128)
+				suprimareaNonMaximelor(i, j) = 0;
+	imshow("Contur final", suprimareaNonMaximelor);
+	waitKey(0);
+}
 
 int main()
 {
@@ -1854,13 +2452,16 @@ int main()
 		printf(" 41 - L8 Modificarea luminozitatii\n");
 		printf(" 42 - L8 Algoritmul de egalizare a histogramei\n\n");
 
-		//printf(" 19 - L4 Aria, centrul de masa, axa de alungire, perimetrul, factorul de subtiere si elongatia\n");
-		//printf(" 20 - L5 Algoritmul de traversare in latime pt etichetarea componentelor conexe\n");
-		printf(" 19 - L6 Algoritmul de urmarire a conturului\n");
-		printf(" 20 - L6 Reconstruieste conturul unui obiect\n");
-		printf(" 21 - L4 EX1\n");
-		printf(" 22 - L8 Histograma Cumulativa\n");
-		printf(" 23 - L5 BFS\n");
+		printf(" 43 - L9 Filtru general care realizeaza operatia de convolutie\n\n");
+
+		printf(" 44 - L10 Filtru median - de dimensiune w variabila(3, 5 sau 7)\n");
+		printf(" 45 - L10 Filtru bidimensional - filtrare cu un nucleu gaussian bidimensional cu w variabila\n");
+		printf(" 46 - L10 Filtru vectorial - filtrare cu un nucleu gaussian separat in Gx si Gy cu w variabila\n\n");
+
+		printf(" 47 - L11 Componentele orizontale, verticale,modulul si directia gradientului prin convolutie cu mastile\n");
+		printf(" 48 - L11 Binarizarea imaginii de la 48 cu un prag fix\n");
+		printf(" 49 - L11 Pasii 1-3 algoritmul Canny\n");
+
 		printf(" 0 - Exit\n\n");
 		printf("Option: ");
 		scanf("%d",&op);
@@ -2042,55 +2643,34 @@ int main()
 			case 42:
 				egalizarea_histogramei();
 				break;
-			/*
-			case 17:
-				afisati_histograma();
+			case 43:
+				nuclee();
 				break;
-			case 18:
-				TraversareInLatime();
+			case 44:
+				test();
 				break;
-			//case 19:
-				//MouseCallBack();
-				//break;
-			case 19:
-				urmarire_contur();
+			case 45:
+				filtrare_nucleu_gaussian_bidimensional();
 				break;
-			case 20:
-				testBorderTracingAlgorithm();
+			case 46:
+				filtrare_nucleu_gaussian_separat_vectorial();
 				break;
-			case 21:
-				char fname6[MAX_PATH];
-				while (openFileDlg(fname6)) {
-					Mat img = imread(fname6);
-					namedWindow("My Window", 1);
-					setMouseCallback("My Window", onMouse, &img);
-					imshow("My Window", img);
-					waitKey();
-				}
+			case 47:
+				gradient_modul_directie();
 				break;
-			case 22:
-				calculateHistogramCumulative();
+			case 48:
+				binarizareModul();
 				break;
-			case 23:
-				getBfsLabeling();
+			case 49:
+				int ceva;
+				printf("3,5 sau 7: ");
+				scanf("%d", &ceva);
+				DetectieMuchii(ceva);
 				break;
-			case 24:
-				char fname7[MAX_PATH];
-				while (openFileDlg(fname7)) {
-					Mat img = imread(fname7, IMREAD_GRAYSCALE);
-					calculateHistogramFromGivenImage(img);
-				}
-				break;
-			/*case 24:
-				//int n;
-				//scanf("%d", &n);
-				getRegionFilling();
-				break;
-			case 25:
-				Mat element = getStructElement();
-				imshow("Element Structural", element);
+			case 50:
+				filtrare_gaussiana(3);
 				waitKey(0);
-				break;*/
+				break;
 		}
 	}
 	while (op!=0);
